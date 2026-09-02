@@ -24,8 +24,8 @@ import {
 } from "@/lib/ventas/schema";
 import {
   calcularVenta,
-  conDeliveryEnObservaciones,
   parseDeliveryDeObservaciones,
+  sinDeliveryEnObservaciones,
 } from "@/lib/ventas/calculos";
 import {
   lineasAsientoCobro,
@@ -184,6 +184,10 @@ type OrdenRaw = Orden & {
 };
 
 function toOrden(raw: OrdenRaw): OrdenDTO {
+  const legacyDelivery = raw.observaciones
+    ? parseDeliveryDeObservaciones(raw.observaciones)
+    : 0;
+  const shippingFeeRaw = Number(raw.shipping_fee ?? 0);
   return {
     id: raw.id,
     numero_orden: raw.numero_orden,
@@ -200,11 +204,8 @@ function toOrden(raw: OrdenRaw): OrdenDTO {
     subtotal: Number(raw.subtotal ?? 0),
     costo_operativo: Number(raw.costo_operativo ?? 0),
     total: Number(raw.total ?? 0),
-    shipping_fee:
-      Number(raw.shipping_fee ?? 0) ||
-      (raw.observaciones
-        ? parseDeliveryDeObservaciones(raw.observaciones)
-        : 0),
+    // shipping_fee es fuente única; fallback a tag legacy solo para lectura de VTA históricas
+    shipping_fee: shippingFeeRaw || legacyDelivery,
     estado: raw.estado as string,
     estado_caja: raw.estado_caja,
     numero_factura: raw.numero_factura,
@@ -661,10 +662,10 @@ export async function crearOrden(
         pay_status: "pendiente",
         vendedor_codigo: vendedor.vendedor_codigo,
         vendedor_nombre: `${vendedor.nombre} ${vendedor.apellido}`.trim(),
-        observaciones: conDeliveryEnObservaciones(
-          parsed.observaciones,
-          calc.costo_delivery,
-        ) || null,
+        // shipping_fee es fuente única; observaciones guarda solo texto del usuario (sin tag DELIVERY:)
+        observaciones: parsed.observaciones
+          ? sinDeliveryEnObservaciones(parsed.observaciones) || null
+          : null,
         is_tax_included: parsed.tipo_venta === "iva_incluido",
         sucursal: parsed.sucursal || null,
         moneda: parsed.moneda ?? "GS",
@@ -1001,7 +1002,7 @@ export async function actualizarOrden(
       }
     }
 
-    // 6) Actualizar encabezado + totales
+    // 6) Actualizar encabezado + totales (shipping_fee fuente única, sin tag)
     await tx.orden.update({
       where: { id },
       data: {
@@ -1014,10 +1015,9 @@ export async function actualizarOrden(
         comision_vendedor: calc.comision_vendedor,
         total: calc.total,
         shipping_fee: calc.costo_delivery || null,
-        observaciones: conDeliveryEnObservaciones(
-          parsed.observaciones,
-          calc.costo_delivery,
-        ) || null,
+        observaciones: parsed.observaciones
+          ? sinDeliveryEnObservaciones(parsed.observaciones) || null
+          : null,
         is_tax_included: parsed.tipo_venta === "iva_incluido",
         sucursal: parsed.sucursal || null,
         moneda: parsed.moneda ?? "GS",

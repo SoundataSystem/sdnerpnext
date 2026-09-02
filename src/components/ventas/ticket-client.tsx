@@ -106,7 +106,12 @@ export function TicketClient({ orden }: { orden: OrdenDTO }) {
   const subtotalSinIva = isIvaIncluido ? Math.round(subtotal / 1.1) : subtotal;
   const iva = isTaxFree ? 0 : isIvaIncluido ? subtotal - subtotalSinIva : Math.round((subtotal * 10) / 100);
   const totalFinal = orden.total ?? (isIvaIncluido ? subtotal : subtotal + iva);
-  const paymentInfo = parsePaymentInfo(orden.observaciones);
+  const paymentInfoBase = parsePaymentInfo(orden.observaciones);
+  const deliveryFromColumn = orden.shipping_fee > 0 ? orden.shipping_fee : 0;
+  const paymentInfo = {
+    ...paymentInfoBase,
+    delivery: deliveryFromColumn > 0 ? deliveryFromColumn : paymentInfoBase.delivery,
+  };
 
   const ticketLineas = useMemo(() => {
     const fmtM = (v: number) => (moneda === "USD" ? `$${v.toFixed(2)}` : `Gs. ${fmt(v)}`);

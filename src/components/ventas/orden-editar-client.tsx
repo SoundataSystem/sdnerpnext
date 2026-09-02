@@ -101,8 +101,8 @@ export function OrdenEditarClient({
       : vendedorActualId,
   );
   const deliveryInicial = useMemo(
-    () => parseDeliveryDeObservaciones(orden.observaciones),
-    [orden.observaciones],
+    () => orden.shipping_fee > 0 ? orden.shipping_fee : parseDeliveryDeObservaciones(orden.observaciones),
+    [orden.observaciones, orden.shipping_fee],
   );
   const [sucursal, setSucursal] = useState(orden.sucursal ?? "ESPAÑA");
   const [tipoVenta, setTipoVenta] = useState<TipoVenta>(

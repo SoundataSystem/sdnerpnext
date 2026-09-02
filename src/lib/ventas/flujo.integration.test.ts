@@ -146,7 +146,7 @@ describe("crearOrden", () => {
     expect(new Set(seqs).size).toBe(3);
   });
 
-  it("crea orden con delivery: total = subtotal + IVA + costo_delivery, guarda shipping_fee y tag DELIVERY:", async () => {
+  it("crea orden con delivery: total = subtotal + IVA + costo_delivery, guarda shipping_fee sin tag DELIVERY:", async () => {
     const { vendedor, cliente, item } = await setupVenta({ stock: 10, precio: 2000 });
 
     const ordenId = await crearOrden(
@@ -157,7 +157,7 @@ describe("crearOrden", () => {
     const orden = await getOrden(ordenId);
     expect(orden!.total).toBe(7200); // 2000 + 200 (IVA) + 5000
     expect(orden!.shipping_fee).toBe(5000);
-    expect(orden!.observaciones).toContain("DELIVERY:5000");
+    expect(orden!.observaciones ?? "").not.toContain("DELIVERY");
 
     const mov = await prisma.cajaMovimiento.findFirst({ where: { orden_id: ordenId } });
     expect(Number(mov!.monto_total)).toBe(7200);

@@ -114,10 +114,11 @@ export function calcularVenta(
   };
 }
 
-// ─── Delivery en observaciones ─────────────────────────────────────────────
-// El ERP React persistía el costo de delivery como `DELIVERY:<monto>` dentro
-// de `observaciones` (el ticket lo imprime como "19681 Costo Delivery").
-// Estos helpers mantienen ese formato para compatibilidad total con VTA históricas.
+// ─── Delivery en observaciones (LEGACY) ─────────────────────────────────────
+// El ERP React persistía el costo como `DELIVERY:<monto>` en `observaciones`.
+// Desde 2026-09-02 shipping_fee es la fuente única; estos helpers quedan solo
+// para lectura de VTA históricas y para el script de limpieza (scripts/limpiar-delivery-tags.mts).
+// No escribir nuevos tags: usar shipping_fee.
 
 const DELIVERY_RE = /DELIVERY:\s*([\d.,]+)/i;
 
@@ -158,6 +159,15 @@ export function conDeliveryEnObservaciones(
 
 export function formatUsd(n: number): string {
   return `$ ${n.toLocaleString("en-US", { maximumFractionDigits: 2 })}`;
+}
+
+// Helper para scripts: lectura legacy shipping_fee con fallback a tag
+export function deliveryLegacyFallback(
+  shippingFee: number | null | undefined,
+  observaciones: string | null | undefined,
+): number {
+  const fee = Number(shippingFee ?? 0);
+  return fee > 0 ? fee : parseDeliveryDeObservaciones(observaciones);
 }
 
 // Estado de cobro de una orden según lo pagado.
