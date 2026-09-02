@@ -3,7 +3,7 @@
 import { z } from "zod";
 import { randomUUID } from "node:crypto";
 import { actionClient } from "@/lib/safe-action";
-import { requireRole } from "@/lib/auth";
+import { requirePermiso } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@/generated/prisma/client";
 import { procesarLote, revertirImportacion } from "@/lib/pegasus/importer";
@@ -23,7 +23,7 @@ const procesarLotePegasusSchema = z.object({
 export const procesarLotePegasusAction = actionClient
   .schema(procesarLotePegasusSchema)
   .action(async ({ parsedInput }) => {
-    const usuario = await requireRole("admin");
+    const usuario = await requirePermiso("pegasus", "importar");
     const res = await procesarLote(
       parsedInput.tipo,
       parsedInput.cabecera,
@@ -112,7 +112,7 @@ const finalizarImportacionPegasusSchema = z.object({
 export const finalizarImportacionPegasusAction = actionClient
   .schema(finalizarImportacionPegasusSchema)
   .action(async ({ parsedInput }) => {
-    const usuario = await requireRole("admin");
+    const usuario = await requirePermiso("pegasus", "importar");
     const imp = await prisma.importacionPegasus.findUnique({
       where: { id: parsedInput.importacionId },
     });
@@ -158,7 +158,7 @@ const revertirImportacionSchema = z.object({
 export const revertirImportacionAction = actionClient
   .schema(revertirImportacionSchema)
   .action(async ({ parsedInput }) => {
-    const usuario = await requireRole("admin");
+    const usuario = await requirePermiso("pegasus", "importar");
     const res = await revertirImportacion(parsedInput.id);
     await notificarYAcreditar({
       usuario_id: usuario.id,

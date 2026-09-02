@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { actionClient } from "@/lib/safe-action";
-import { requireRole, requireUser } from "@/lib/auth";
+import { requirePermiso, requireUser } from "@/lib/auth";
 import {
   crearAsientoSchema,
   crearCuentaSchema,
@@ -26,8 +26,6 @@ import {
 } from "@/lib/contabilidad/repository";
 import { notificarYAcreditar } from "@/lib/sistema/hooks";
 
-const ROLES_CONTABILIDAD = ["admin", "contabilidad"] as const;
-
 function revalidarContabilidad() {
   revalidatePath("/contabilidad", "layout");
 }
@@ -37,7 +35,7 @@ function revalidarContabilidad() {
 export const crearCuentaAction = actionClient
   .inputSchema(crearCuentaSchema)
   .action(async ({ parsedInput }) => {
-    await requireRole(...ROLES_CONTABILIDAD);
+    await requirePermiso("contabilidad", "crear");
     const usuario = await requireUser();
     const cuenta = await crearCuenta(parsedInput);
     await notificarYAcreditar({
@@ -60,7 +58,7 @@ export const actualizarCuentaAction = actionClient
     }),
   )
   .action(async ({ parsedInput }) => {
-    await requireRole(...ROLES_CONTABILIDAD);
+    await requirePermiso("contabilidad", "editar");
     const usuario = await requireUser();
     await actualizarCuenta(parsedInput.id, parsedInput.data);
     await notificarYAcreditar({
@@ -80,7 +78,7 @@ export const actualizarCuentaAction = actionClient
 export const crearAsientoAction = actionClient
   .inputSchema(crearAsientoSchema)
   .action(async ({ parsedInput }) => {
-    await requireRole(...ROLES_CONTABILIDAD);
+    await requirePermiso("contabilidad", "crear");
     const usuario = await requireUser();
     const id = await crearAsiento(parsedInput);
     const asiento = await getAsiento(id);
@@ -107,7 +105,7 @@ export const crearAsientoAction = actionClient
 export const contabilizarAsientoAction = actionClient
   .inputSchema(contabilizarAsientoSchema)
   .action(async ({ parsedInput }) => {
-    await requireRole(...ROLES_CONTABILIDAD);
+    await requirePermiso("contabilidad", "contabilizar");
     const usuario = await requireUser();
     await contabilizarAsiento(parsedInput.id);
     const asiento = await getAsiento(parsedInput.id);
@@ -126,7 +124,7 @@ export const contabilizarAsientoAction = actionClient
 export const anularAsientoAction = actionClient
   .inputSchema(anularAsientoSchema)
   .action(async ({ parsedInput }) => {
-    await requireRole(...ROLES_CONTABILIDAD);
+    await requirePermiso("contabilidad", "asentar");
     const usuario = await requireUser();
     await anularAsiento(parsedInput.id, parsedInput.motivo);
     const asiento = await getAsiento(parsedInput.id);
@@ -143,7 +141,7 @@ export const anularAsientoAction = actionClient
   });
 
 export const siguienteNumeroAsientoAction = actionClient.action(async () => {
-  await requireRole(...ROLES_CONTABILIDAD);
+  await requirePermiso("contabilidad", "leer");
   return { numero: await getProximoAsientoNumber() };
 });
 
@@ -152,7 +150,7 @@ export const siguienteNumeroAsientoAction = actionClient.action(async () => {
 export const getLibroMayorAction = actionClient
   .inputSchema(libroMayorFiltroSchema)
   .action(async ({ parsedInput }) => {
-    await requireRole(...ROLES_CONTABILIDAD);
+    await requirePermiso("contabilidad", "leer");
     return getLibroMayor(
       parsedInput.cuenta_id,
       parsedInput.desde,
@@ -163,6 +161,6 @@ export const getLibroMayorAction = actionClient
 export const getBalanceComprobacionAction = actionClient
   .inputSchema(balanceFiltroSchema)
   .action(async ({ parsedInput }) => {
-    await requireRole(...ROLES_CONTABILIDAD);
+    await requirePermiso("contabilidad", "leer");
     return getBalanceComprobacion(parsedInput.desde, parsedInput.hasta);
   });

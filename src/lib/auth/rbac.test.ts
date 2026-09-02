@@ -38,6 +38,22 @@ describe("equivalencia requireRole → requirePermiso (módulos migrados)", () =
       ["admin", "vendedor", "cajero", "administracion", "devoluciones"].sort(),
     );
   });
+
+  it("contabilidad:leer/crear/editar/contabilizar/asentar === {admin, contabilidad} (ROLES_CONTABILIDAD exacto)", () => {
+    for (const perm of [
+      "contabilidad:leer",
+      "contabilidad:crear",
+      "contabilidad:editar",
+      "contabilidad:contabilizar",
+      "contabilidad:asentar",
+    ] as const) {
+      expect([...rolesConPermiso(perm)].sort()).toEqual(["admin", "contabilidad"].sort());
+    }
+  });
+
+  it("pegasus:importar === {admin} (legacy pegasus admin solo)", () => {
+    expect([...rolesConPermiso("pegasus:importar")].sort()).toEqual(["admin"].sort());
+  });
 });
 
 describe("comportamiento RBAC", () => {

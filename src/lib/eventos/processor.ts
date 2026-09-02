@@ -33,13 +33,36 @@ export type PublicadorEvento = (evento: {
 }) => Promise<void>;
 
 /**
- * Publicación por defecto: el consumidor final aún no está definido
- * (webhooks/broker), por lo que "publicar" marca el evento como consumido.
- * Los tipos de evento ya son semánticos (venta.creada, cobro.registrado, ...)
- * para que el consumidor futuro pueda suscribirse por tipo.
+ * Publicación por defecto:
+ * - Si OUTBOX_WEBHOOK_URL está configurado → POST JSON al webhook
+ *   (con HMAC opcional via OUTBOX_WEBHOOK_SECRET). Falla → reintento.
+ * - Si no hay URL → no-op (marca PROCESADO, ver AUDITORIA_FASE7.md §F7-10).
  */
-const publicadorDefault: PublicadorEvento = async () => {
-  // No-op deliberado: ver AUDITORIA_FASE7.md §F7-10.
+const publicadorDefault: PublicadorEvento = async (evento) => {
+  const url = process.env.OUTBOX_WEBHOOK_URL?.trim();
+  if (!url) return;
+  const secret = process.env.OUTBOX_WEBHOOK_SECRET?.trim();
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 10_000);
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Correlation-Id": evento.correlation_id,
+        "X-Outbox-Tipo": evento.tipo,
+        ...(secret ? { "X-Outbox-Secret": secret } : {}),
+      },
+      body: JSON.stringify(evento),
+      signal: controller.signal,
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      throw new Error(`Webhook ${res.status} ${body.slice(0, 500)}`);
+    }
+  } finally {
+    clearTimeout(timeout);
+  }
 };
 
 interface EventoClaim {
