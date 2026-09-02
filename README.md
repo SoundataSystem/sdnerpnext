@@ -124,6 +124,28 @@ prisma/
 └── schema.prisma           # Modelos + enums + relaciones (48 tablas)
 ```
 
+## Producción (Vercel)
+
+- **URL:** https://ovg-prodqa-v2.vercel.app (alias de `ovg-prodqa-v2-*.vercel.app`, team `sistemas-6754s-projects`, proyecto `ovg-prodqa-v2`)
+- **Deploy:** `vercel --prod` desde `C:\Users\ASUS\Desktop\prodqa-v2` (ya linkeado via `.vercel/project.json`). Histórico: `95265aa`→`1f482c5` en rama `prodqa-v2` de https://github.com/SoundataSystem/sdnerpnext.
+- **Variables Vercel Production (ver `vercel env ls`):**
+  ```
+  DATABASE_URL, DIRECT_URL, NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY,
+  SUPABASE_SERVICE_ROLE_KEY, NEXT_PUBLIC_APP_URL, PRISMA_TX_TIMEOUT_MS,
+  HEALTHCHECK_TOKEN, CRON_SECRET, OUTBOX_WEBHOOK_URL, OUTBOX_WEBHOOK_SECRET
+  ```
+  `DATABASE_URL` usa pooler 6543 (runtime), `DIRECT_URL` 5432 (migrate). `HEALTHCHECK_TOKEN`/`CRON_SECRET` son obligatorios en prod (fail-closed).
+
+### Runbook
+
+| Check | Comando |
+|---|---|
+| Health | `curl -H "Authorization: Bearer $HEALTHCHECK_TOKEN" https://ovg-prodqa-v2.vercel.app/api/health` → `{"status":"ok"}` (sin token 401, sin var 500) |
+| Outbox cron | `curl -H "Authorization: Bearer $CRON_SECRET" https://ovg-prodqa-v2.vercel.app/api/cron/outbox` → `{"ok":true,"procesados":0…}`; cron Vercel `vercel.json:0 4 * * *` (Hobby 1/día) + externo cada 5min |
+| Webhook E2E | `OUTBOX_WEBHOOK_URL=https://webhook.site/236ac0fa-742d-43f9-81cd-b22af1fff90b` (+ `OUTBOX_WEBHOOK_SECRET`). Test: insert PENDIENTE → `GET /api/cron/outbox` → webhook.site recibe `X-Correlation-Id/X-Outbox-Tipo` + body `{id,tipo,entidad,…}` (verificado 2026-09-02, panel `https://webhook.site/#!/view/236ac0fa-742d-43f9-81cd-b22af1fff90b`) |
+| Cron externo sin GitHub | **cron-job.org** cada 5min GET con header `Authorization: Bearer $CRON_SECRET`. Alternativa GitHub Actions en `.github/workflows/outbox-cron.yml` (`*/5 * * * *`) requiere push a rama default + secret `CRON_SECRET` |
+| Delivery migración | `shipping_fee` es fuente única; tag `DELIVERY:` legacy eliminado (script `scripts/limpiar-delivery-tags.mts --apply` migró 26 y limpió 33, 0 restantes) |
+
 ## Notas de la migración
 
 - El esquema Prisma se derivó del DDL original **corrigiendo errores**: el `DEFAULT 'pendiente'` de `ordenes_compra.estado` no estaba en su CHECK (se agregó `pendiente` al enum), las relaciones duplicadas a `clientes`/`proveedores`/`usuarios` se nombraron explícitamente, y las columnas legacy sin FK se mantienen como campos planos.
