@@ -38,7 +38,7 @@ export type PublicadorEvento = (evento: {
  *   (con HMAC opcional via OUTBOX_WEBHOOK_SECRET). Falla → reintento.
  * - Si no hay URL → no-op (marca PROCESADO, ver AUDITORIA_FASE7.md §F7-10).
  */
-const publicadorDefault: PublicadorEvento = async (evento) => {
+export const publicadorDefault: PublicadorEvento = async (evento) => {
   const url = process.env.OUTBOX_WEBHOOK_URL?.trim();
   if (!url) return;
   const secret = process.env.OUTBOX_WEBHOOK_SECRET?.trim();
