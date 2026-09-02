@@ -8,12 +8,12 @@ export const metadata: Metadata = {
 };
 
 export default async function ClientesPage(props: {
-  searchParams: Promise<{ busqueda?: string; page?: string }>;
+  searchParams: Promise<{ busqueda?: string; page?: string; pageSize?: string }>;
 }) {
   await getRoleOrRedirect("admin", "vendedor", "cajero");
-  const { busqueda, page } = await props.searchParams;
+  const { busqueda, page, pageSize: qsPageSize } = await props.searchParams;
   const p = Math.max(1, Number(page) || 1);
-  const pageSize = 20;
+  const pageSize = Math.min(100, Math.max(10, Number(qsPageSize) || 20));
   const { items, total } = await getClientesPage({
     page: p,
     pageSize,

@@ -67,14 +67,18 @@ export function ClientesClient({
 
   const buscar = (termino: string) => {
     const q = termino.trim();
-    router.push(`/ventas/clientes?busqueda=${encodeURIComponent(q)}&page=1`);
+    router.push(`/ventas/clientes?busqueda=${encodeURIComponent(q)}&page=1&pageSize=${pageSize}`);
   };
 
   const irPagina = (p: number) => {
     if (p < 1 || p > totalPages) return;
     router.push(
-      `/ventas/clientes?busqueda=${encodeURIComponent(busquedaInicial)}&page=${p}`,
+      `/ventas/clientes?busqueda=${encodeURIComponent(busquedaInicial)}&page=${p}&pageSize=${pageSize}`,
     );
+  };
+
+  const cambiarPageSize = (n: number) => {
+    router.push(`/ventas/clientes?busqueda=${encodeURIComponent(busquedaInicial)}&page=1&pageSize=${n}`);
   };
 
   const abrirCrear = () => {
@@ -149,36 +153,48 @@ export function ClientesClient({
           <p className="text-sm font-medium text-zinc-500">
             {busquedaInicial ? (
               <>
-                {total} resultado{total !== 1 ? "s" : ""} para{" "}
+                {numero(total)} resultado{total !== 1 ? "s" : ""} para{" "}
                 <span className="font-semibold">&ldquo;{busquedaInicial}&rdquo;</span>
               </>
             ) : (
               <>
-                {numero(total)} cliente{total !== 1 ? "s" : ""}
+                {numero(total)} cliente{total !== 1 ? "s" : ""} · Mostrando {(page - 1) * pageSize + 1}–{Math.min(page * pageSize, total)} · 43.485 totales (paginado)
               </>
             )}
           </p>
           <div className="flex-1" />
-          <div className="relative flex w-full sm:w-72">
-            <div className="relative flex-1">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
-              <input
-                type="text"
-                placeholder="Buscar por nombre o cédula..."
-                value={busquedaInput}
-                onChange={(e) => setBusquedaInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") buscar(busquedaInput);
-                }}
-                className="w-full rounded-l-lg border border-zinc-300 bg-white py-2 pl-10 pr-4 text-sm dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-50"
-              />
-            </div>
-            <button
-              onClick={() => buscar(busquedaInput)}
-              className="rounded-r-lg border border-l-0 border-zinc-300 bg-zinc-100 px-3 text-sm font-medium text-zinc-600 hover:bg-zinc-200 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300"
+          <div className="flex items-center gap-2">
+            <select
+              value={pageSize}
+              onChange={(e) => cambiarPageSize(Number(e.target.value))}
+              className="rounded-lg border border-zinc-300 bg-white px-2 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950"
+              title="Filas por página"
             >
-              Buscar
-            </button>
+              <option value={20}>20 / pág</option>
+              <option value={50}>50 / pág</option>
+              <option value={100}>100 / pág</option>
+            </select>
+            <div className="relative flex w-full sm:w-72">
+              <div className="relative flex-1">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
+                <input
+                  type="text"
+                  placeholder="Buscar por nombre, apellido, cédula o RUC..."
+                  value={busquedaInput}
+                  onChange={(e) => setBusquedaInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") buscar(busquedaInput);
+                  }}
+                  className="w-full rounded-l-lg border border-zinc-300 bg-white py-2 pl-10 pr-4 text-sm dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-50"
+                />
+              </div>
+              <button
+                onClick={() => buscar(busquedaInput)}
+                className="rounded-r-lg border border-l-0 border-zinc-300 bg-zinc-100 px-3 text-sm font-medium text-zinc-600 hover:bg-zinc-200 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300"
+              >
+                Buscar
+              </button>
+            </div>
           </div>
         </div>
 
