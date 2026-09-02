@@ -117,6 +117,8 @@ enum TipoMovimientoInventario {
   ajuste
   transferencia
   devolucion
+  devolucion_venta
+  devolucion_compra
 }
 
 enum TipoServicio {
@@ -828,6 +830,7 @@ model Cotizacion {
   sucursal          String?
   moneda            String            @default("GS")
   tipo_cambio       Decimal           @default(1)
+  incluye_iva       Boolean?          @default(false)
   created_at        DateTime          @default(now()) @db.Timestamptz(6)
   updated_at        DateTime          @default(now()) @db.Timestamptz(6)
 
@@ -930,6 +933,8 @@ model DevolucionVenta {
   motivo            String?
   subtotal          Decimal          @default(0)
   estado            EstadoDevolucion @default(pendiente)
+  es_nota_credito   Boolean?         @default(false)
+  credito_cuentas_cobrar_id String?  @db.Uuid
   created_at        DateTime         @default(now()) @db.Timestamptz(6)
   updated_at        DateTime         @default(now()) @db.Timestamptz(6)
 
