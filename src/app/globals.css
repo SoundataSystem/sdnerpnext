@@ -3,6 +3,7 @@
 :root {
   --background: #ffffff;
   --foreground: #171717;
+  color-scheme: light;
 }
 
 @theme inline {
@@ -16,6 +17,26 @@
   :root {
     --background: #0a0a0a;
     --foreground: #ededed;
+    color-scheme: dark;
+  }
+  /* Los campos de formulario sin variantes `dark:` quedaban con el fondo blanco
+     del navegador y el texto heredaba el foreground claro (blanco) del body →
+     texto blanco sobre fondo blanco. `color-scheme: dark` pinta los controles
+     nativos (select desplegable, checkbox, date, placeholder) y estos overrides
+     fuerzan fondo/texto oscuros en inputs/selects/textarea etiquetados `bg-white` */
+  input:where(:not([type="checkbox"]):not([type="radio"]):not([type="color"]):not([type="range"]):not([type="file"])).bg-white,
+  select:where(:not([multiple])).bg-white,
+  textarea.bg-white {
+    background-color: #0a0a0a;
+    color: #ededed;
+  }
+  input:where(:not([type="checkbox"]):not([type="radio"]):not([type="color"]):not([type="range"]):not([type="file"])),
+  select,
+  textarea {
+    color-scheme: dark;
+  }
+  :is(input, select, textarea)::placeholder {
+    color: #71717a;
   }
 }
 
