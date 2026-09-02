@@ -157,29 +157,29 @@ export function ClientesClient({
                 <span className="font-semibold">&ldquo;{busquedaInicial}&rdquo;</span>
               </>
             ) : (
-              <>
-                {numero(total)} cliente{total !== 1 ? "s" : ""} · Mostrando {(page - 1) * pageSize + 1}–{Math.min(page * pageSize, total)} · 43.485 totales (paginado)
-              </>
+              <>Escriba en el buscador para encontrar clientes (43.485 registrados)</>
             )}
           </p>
           <div className="flex-1" />
           <div className="flex items-center gap-2">
-            <select
-              value={pageSize}
-              onChange={(e) => cambiarPageSize(Number(e.target.value))}
-              className="rounded-lg border border-zinc-300 bg-white px-2 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950"
-              title="Filas por página"
-            >
-              <option value={20}>20 / pág</option>
-              <option value={50}>50 / pág</option>
-              <option value={100}>100 / pág</option>
-            </select>
+            {busquedaInicial && (
+              <select
+                value={pageSize}
+                onChange={(e) => cambiarPageSize(Number(e.target.value))}
+                className="rounded-lg border border-zinc-300 bg-white px-2 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950"
+                title="Filas por página"
+              >
+                <option value={20}>20 / pág</option>
+                <option value={50}>50 / pág</option>
+                <option value={100}>100 / pág</option>
+              </select>
+            )}
             <div className="relative flex w-full sm:w-72">
               <div className="relative flex-1">
                 <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
                 <input
                   type="text"
-                  placeholder="Buscar por nombre, apellido, cédula o RUC..."
+                  placeholder="Buscar por nombre, cédula, teléfono... (mín. 2 caracteres)"
                   value={busquedaInput}
                   onChange={(e) => setBusquedaInput(e.target.value)}
                   onKeyDown={(e) => {
@@ -190,7 +190,8 @@ export function ClientesClient({
               </div>
               <button
                 onClick={() => buscar(busquedaInput)}
-                className="rounded-r-lg border border-l-0 border-zinc-300 bg-zinc-100 px-3 text-sm font-medium text-zinc-600 hover:bg-zinc-200 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300"
+                disabled={!busquedaInput.trim() || busquedaInput.trim().length < 2}
+                className="rounded-r-lg border border-l-0 border-zinc-300 bg-zinc-100 px-3 text-sm font-medium text-zinc-600 hover:bg-zinc-200 disabled:opacity-40 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300"
               >
                 Buscar
               </button>
@@ -248,22 +249,13 @@ export function ClientesClient({
               </tbody>
             </table>
           </div>
+        ) : !busquedaInicial ? (
+          <div className="py-12 text-center text-zinc-400">Escriba en el buscador para encontrar clientes</div>
         ) : (
           <div className="py-12 text-center">
             <Users className="mx-auto mb-3 h-12 w-12 text-zinc-300" />
-            <p className="font-medium text-zinc-500">
-              {busquedaInicial
-                ? `Sin resultados para "${busquedaInicial}"`
-                : "No hay clientes registrados"}
-            </p>
-            {!busquedaInicial && (
-              <button
-                onClick={abrirCrear}
-                className="mt-4 inline-flex items-center gap-1.5 rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-700 dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-zinc-200"
-              >
-                <Plus className="h-4 w-4" /> Nuevo Cliente
-              </button>
-            )}
+            <p className="font-medium text-zinc-500">{`Sin resultados para "${busquedaInicial}"`}</p>
+            <p className="mt-1 text-sm text-zinc-400">Pruebe con nombre, apellido, cédula o teléfono (mín. 2 caracteres)</p>
           </div>
         )}
 

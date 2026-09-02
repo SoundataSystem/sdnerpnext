@@ -260,23 +260,26 @@ export async function getClientesPage({
   pageSize?: number;
   busqueda?: string;
 }): Promise<{ items: ClienteDTO[]; total: number }> {
-  const terminos = busqueda?.trim().split(/\s+/).filter(Boolean) ?? [];
-  const filter: Prisma.ClienteWhereInput | undefined = terminos.length
-    ? {
-        AND: terminos.map((t) => ({
-          OR: [
-            { nombre: { contains: t, mode: "insensitive" as const } },
-            { apellido: { contains: t, mode: "insensitive" as const } },
-            { cedula: { contains: t } },
-            { ruc: { contains: t } },
-          ],
-        })),
-      }
-    : undefined;
+  const term = busqueda?.trim() ?? "";
+  // Replica PROD QA original (ClientesDashboard + RPC buscar_clientes):
+  // - vacío o <2 chars → 0 resultados (prompt "Escriba en el buscador")
+  // - single-term ILIKE OR across nombre/apellido/cedula/telefono/ruc, LIMIT pageSize, ORDER BY nombre ASC (no split AND)
+  if (!term || term.length < 2) {
+    return { items: [], total: 0 };
+  }
+  const filter: Prisma.ClienteWhereInput = {
+    OR: [
+      { nombre: { contains: term, mode: "insensitive" as const } },
+      { apellido: { contains: term, mode: "insensitive" as const } },
+      { cedula: { contains: term } },
+      { telefono: { contains: term } },
+      { ruc: { contains: term } },
+    ],
+  };
   const [rows, total] = await Promise.all([
     prisma.cliente.findMany({
       where: filter,
-      orderBy: [{ apellido: "asc" }, { nombre: "asc" }],
+      orderBy: [{ nombre: "asc" }],
       skip: (page - 1) * pageSize,
       take: pageSize,
     }),
