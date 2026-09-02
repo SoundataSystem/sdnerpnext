@@ -1,0 +1,27 @@
+name: Outbox cron (cada 5 min)
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+jobs:
+  ping-outbox:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Ping /api/cron/outbox
+        run: |
+          set -e
+          URL="${{ secrets.OUTBOX_CRON_URL || 'https://ovg-prodqa-v2.vercel.app/api/cron/outbox' }}"
+          echo "POST $URL"
+          HTTP=$(curl -s -o /tmp/body.txt -w "%{http_code}" \
+            -X GET \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            "$URL" || true)
+          echo "HTTP $HTTP"
+          cat /tmp/body.txt || true
+          if [ "$HTTP" -ne 200 ] && [ "$HTTP" -ne 204 ]; then
+            echo "::error::outbox cron falló HTTP $HTTP"
+            exit 1
+          fi
