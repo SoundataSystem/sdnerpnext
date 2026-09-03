@@ -24,8 +24,8 @@ import {
 } from "@/lib/ventas/schema";
 import {
   calcularVenta,
+  conDeliveryEnObservaciones,
   parseDeliveryDeObservaciones,
-  sinDeliveryEnObservaciones,
 } from "@/lib/ventas/calculos";
 import {
   lineasAsientoCobro,
@@ -184,10 +184,6 @@ type OrdenRaw = Orden & {
 };
 
 function toOrden(raw: OrdenRaw): OrdenDTO {
-  const legacyDelivery = raw.observaciones
-    ? parseDeliveryDeObservaciones(raw.observaciones)
-    : 0;
-  const shippingFeeRaw = Number(raw.shipping_fee ?? 0);
   return {
     id: raw.id,
     numero_orden: raw.numero_orden,
@@ -204,8 +200,11 @@ function toOrden(raw: OrdenRaw): OrdenDTO {
     subtotal: Number(raw.subtotal ?? 0),
     costo_operativo: Number(raw.costo_operativo ?? 0),
     total: Number(raw.total ?? 0),
-    // shipping_fee es fuente única; fallback a tag legacy solo para lectura de VTA históricas
-    shipping_fee: shippingFeeRaw || legacyDelivery,
+    shipping_fee:
+      Number(raw.shipping_fee ?? 0) ||
+      (raw.observaciones
+        ? parseDeliveryDeObservaciones(raw.observaciones)
+        : 0),
     estado: raw.estado as string,
     estado_caja: raw.estado_caja,
     numero_factura: raw.numero_factura,
@@ -260,32 +259,29 @@ export async function getClientesPage({
   pageSize?: number;
   busqueda?: string;
 }): Promise<{ items: ClienteDTO[]; total: number }> {
-  const term = busqueda?.trim() ?? "";
-  // Replica PROD QA original (ClientesDashboard + RPC buscar_clientes):
-  // - vacío o <2 chars → 0 resultados (prompt "Escriba en el buscador")
-  // - single-term ILIKE OR across nombre/apellido/cedula/telefono/ruc, LIMIT pageSize, ORDER BY nombre ASC (no split AND)
-  if (!term || term.length < 2) {
-    return { items: [], total: 0 };
-  }
-  const filter: Prisma.ClienteWhereInput = {
-    OR: [
-      { nombre: { contains: term, mode: "insensitive" as const } },
-      { apellido: { contains: term, mode: "insensitive" as const } },
-      { cedula: { contains: term } },
-      { telefono: { contains: term } },
-      { ruc: { contains: term } },
-    ],
-  };
-  const [rows, total] = await Promise.all([
-    prisma.cliente.findMany({
-      where: filter,
-      orderBy: [{ nombre: "asc" }],
-      skip: (page - 1) * pageSize,
-      take: pageSize,
-    }),
-    prisma.cliente.count({ where: filter }),
+  const raw = busqueda?.trim() ?? "";
+  if (!raw || raw.length < 2) return { items: [], total: 0 };
+  const terminos = raw.split(/\s+/).filter(Boolean);
+  const esc = (s: string) => s.replace(/'/g, "''");
+  const qLower = raw.toLowerCase();
+  const qEsc = esc(qLower);
+  const whereParts = terminos.map((t) => {
+    const tEsc = esc(t);
+    const isNum = /^\d+$/.test(t);
+    return isNum
+      ? `(cedula ILIKE '%${tEsc}%' OR ruc ILIKE '%${tEsc}%' OR telefono ILIKE '%${tEsc}%')`
+      : `(nombre ILIKE '%${tEsc}%' OR apellido ILIKE '%${tEsc}%')`;
+  });
+  const whereSql = whereParts.join(" AND ");
+  const orderSql = `CASE WHEN lower(nombre || ' ' || apellido) = '${qEsc}' THEN 0 WHEN lower(nombre || ' ' || apellido) LIKE '${qEsc}%' THEN 1 WHEN lower(nombre || ' ' || apellido) LIKE '%${qEsc}%' THEN 2 ELSE 3 END, nombre ASC`;
+  const countSql = `SELECT count(*)::int as c FROM clientes WHERE ${whereSql}`;
+  const dataSql = `SELECT * FROM clientes WHERE ${whereSql} ORDER BY ${orderSql} LIMIT ${pageSize} OFFSET ${(page - 1) * pageSize}`;
+  const [countRes, rowsRaw] = await Promise.all([
+    prisma.$queryRawUnsafe<{ c: number }[]>(countSql),
+    prisma.$queryRawUnsafe<Cliente[]>(dataSql),
   ]);
-  return { items: rows.map(toCliente), total };
+  const total = countRes[0]?.c ?? 0;
+  return { items: (rowsRaw as Cliente[]).map(toCliente), total };
 }
 
 // ─── Cursor-based pagination (keyset) para datasets >10k ─────────────────────
@@ -665,10 +661,10 @@ export async function crearOrden(
         pay_status: "pendiente",
         vendedor_codigo: vendedor.vendedor_codigo,
         vendedor_nombre: `${vendedor.nombre} ${vendedor.apellido}`.trim(),
-        // shipping_fee es fuente única; observaciones guarda solo texto del usuario (sin tag DELIVERY:)
-        observaciones: parsed.observaciones
-          ? sinDeliveryEnObservaciones(parsed.observaciones) || null
-          : null,
+        observaciones: conDeliveryEnObservaciones(
+          parsed.observaciones,
+          calc.costo_delivery,
+        ) || null,
         is_tax_included: parsed.tipo_venta === "iva_incluido",
         sucursal: parsed.sucursal || null,
         moneda: parsed.moneda ?? "GS",
@@ -1005,7 +1001,7 @@ export async function actualizarOrden(
       }
     }
 
-    // 6) Actualizar encabezado + totales (shipping_fee fuente única, sin tag)
+    // 6) Actualizar encabezado + totales
     await tx.orden.update({
       where: { id },
       data: {
@@ -1018,9 +1014,10 @@ export async function actualizarOrden(
         comision_vendedor: calc.comision_vendedor,
         total: calc.total,
         shipping_fee: calc.costo_delivery || null,
-        observaciones: parsed.observaciones
-          ? sinDeliveryEnObservaciones(parsed.observaciones) || null
-          : null,
+        observaciones: conDeliveryEnObservaciones(
+          parsed.observaciones,
+          calc.costo_delivery,
+        ) || null,
         is_tax_included: parsed.tipo_venta === "iva_incluido",
         sucursal: parsed.sucursal || null,
         moneda: parsed.moneda ?? "GS",
