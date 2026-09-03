@@ -234,21 +234,38 @@ function toOrden(raw: OrdenRaw): OrdenDTO {
 // ────────────────────────────────────────────────────────────────────────────
 
 export async function getClientes(busqueda?: string): Promise<ClienteDTO[]> {
-  const rows = await prisma.cliente.findMany({
-    where: busqueda?.trim()
-      ? {
-          OR: [
-            { nombre: { contains: busqueda, mode: "insensitive" } },
-            { apellido: { contains: busqueda, mode: "insensitive" } },
-            { cedula: { contains: busqueda } },
-            { ruc: { contains: busqueda } },
-          ],
-        }
-      : undefined,
-    orderBy: [{ apellido: "asc" }, { nombre: "asc" }],
-    take: 1000,
+  const raw = busqueda?.trim() ?? "";
+  if (!raw) {
+    const rows = await prisma.cliente.findMany({ orderBy: [{ apellido: "asc" }, { nombre: "asc" }], take: 1000 });
+    return rows.map(toCliente);
+  }
+  if (raw.length < 2) return [];
+  const terminos = raw.split(/\s+/).filter(Boolean);
+  const filter: Prisma.ClienteWhereInput = {
+    AND: terminos.map((t) => {
+      const isNum = /^\d+$/.test(t);
+      return isNum
+        ? { OR: [{ cedula: { contains: t } }, { ruc: { contains: t } }, { telefono: { contains: t } }] }
+        : { OR: [{ nombre: { contains: t, mode: "insensitive" as const } }, { apellido: { contains: t, mode: "insensitive" as const } }] };
+    }),
+  };
+  const rows = await prisma.cliente.findMany({ where: filter, orderBy: [{ apellido: "asc" }, { nombre: "asc" }], take: 1000 });
+  const qLower = raw.toLowerCase();
+  const ranked = [...rows].sort((a, b) => {
+    const fullA = `${a.nombre} ${a.apellido}`.toLowerCase();
+    const fullB = `${b.nombre} ${b.apellido}`.toLowerCase();
+    const sc = (full: string) => {
+      if (full === qLower) return 0;
+      if (full.startsWith(qLower)) return 1;
+      if (terminos.every((t) => full.includes(t.toLowerCase()))) return 2;
+      return 3;
+    };
+    const sa = sc(fullA);
+    const sb = sc(fullB);
+    if (sa !== sb) return sa - sb;
+    return fullA.localeCompare(fullB);
   });
-  return rows.map(toCliente);
+  return ranked.map(toCliente);
 }
 
 export async function getClientesPage({
@@ -260,32 +277,54 @@ export async function getClientesPage({
   pageSize?: number;
   busqueda?: string;
 }): Promise<{ items: ClienteDTO[]; total: number }> {
-  const term = busqueda?.trim() ?? "";
-  // Replica PROD QA original (ClientesDashboard + RPC buscar_clientes):
-  // - vacío o <2 chars → 0 resultados (prompt "Escriba en el buscador")
-  // - single-term ILIKE OR across nombre/apellido/cedula/telefono/ruc, LIMIT pageSize, ORDER BY nombre ASC (no split AND)
-  if (!term || term.length < 2) {
-    return { items: [], total: 0 };
+  const raw = busqueda?.trim() ?? "";
+  if (!raw || raw.length < 2) return { items: [], total: 0 };
+  const terminos = raw.split(/\s+/).filter(Boolean);
+  // Precisa b52: cada término como palabra completa (\y) en nombre/apellido, o exacto en cedula/ruc/telefono
+  // Evita "Juan" → "Juana" (substring) usando word-boundary ~* '\yJuan\y' (case-insensitive)
+  const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const whereParts: string[] = [];
+  const params: unknown[] = [];
+  let idx = 1;
+  for (const t of terminos) {
+    const isNum = /^\d+$/.test(t);
+    if (isNum) {
+      whereParts.push(`(cedula = $${idx} OR ruc = $${idx} OR telefono = $${idx})`);
+      params.push(t);
+      idx++;
+    } else {
+      const pat = `\\y${escapeRegExp(t)}\\y`;
+      whereParts.push(`(nombre ~* $${idx} OR apellido ~* $${idx})`);
+      params.push(pat);
+      idx++;
+    }
   }
-  const filter: Prisma.ClienteWhereInput = {
-    OR: [
-      { nombre: { contains: term, mode: "insensitive" as const } },
-      { apellido: { contains: term, mode: "insensitive" as const } },
-      { cedula: { contains: term } },
-      { telefono: { contains: term } },
-      { ruc: { contains: term } },
-    ],
-  };
-  const [rows, total] = await Promise.all([
-    prisma.cliente.findMany({
-      where: filter,
-      orderBy: [{ nombre: "asc" }],
-      skip: (page - 1) * pageSize,
-      take: pageSize,
-    }),
-    prisma.cliente.count({ where: filter }),
+  const whereSql = whereParts.join(" AND ");
+  const countSql = `SELECT count(*)::int as c FROM clientes WHERE ${whereSql}`;
+  const dataSql = `SELECT * FROM clientes WHERE ${whereSql} ORDER BY nombre ASC LIMIT $${idx} OFFSET $${idx + 1}`;
+  const countParams = [...params];
+  const dataParams = [...params, pageSize, (page - 1) * pageSize];
+  const [countRes, rowsRaw] = await Promise.all([
+    prisma.$queryRawUnsafe<{ c: number }[]>(countSql, ...countParams),
+    prisma.$queryRawUnsafe<Cliente[]>(dataSql, ...dataParams),
   ]);
-  return { items: rows.map(toCliente), total };
+  const total = countRes[0]?.c ?? 0;
+  // Ranking: exact full name > prefix > contains (ya filtrado por palabra completa, pero ordena relevancia)
+  const qLower = raw.toLowerCase();
+  const ranked = [...(rowsRaw as Cliente[])].sort((a, b) => {
+    const fullA = `${a.nombre} ${a.apellido}`.toLowerCase();
+    const fullB = `${b.nombre} ${b.apellido}`.toLowerCase();
+    const score = (full: string) => {
+      if (full === qLower) return 0;
+      if (full.startsWith(qLower)) return 1;
+      return 2;
+    };
+    const sa = score(fullA);
+    const sb = score(fullB);
+    if (sa !== sb) return sa - sb;
+    return fullA.localeCompare(fullB);
+  });
+  return { items: ranked.map(toCliente), total };
 }
 
 // ─── Cursor-based pagination (keyset) para datasets >10k ─────────────────────
@@ -336,19 +375,17 @@ export async function getClientesCursor({
   prevCursor: ClienteCursor | null;
 }> {
   function makeClientFilter(busqueda?: string): Prisma.ClienteWhereInput | undefined {
-  const terminos = busqueda?.trim().split(/\s+/).filter(Boolean) ?? [];
-  return terminos.length
-    ? {
-        AND: terminos.map((t) => ({
-          OR: [
-            { nombre: { contains: t, mode: "insensitive" as const } },
-            { apellido: { contains: t, mode: "insensitive" as const } },
-            { cedula: { contains: t } },
-            { ruc: { contains: t } },
-          ],
-        })),
-      }
-    : undefined;
+  const raw = busqueda?.trim() ?? "";
+  if (!raw || raw.length < 2) return undefined;
+  const terminos = raw.split(/\s+/).filter(Boolean);
+  return {
+    AND: terminos.map((t) => {
+      const isNum = /^\d+$/.test(t);
+      return isNum
+        ? { OR: [{ cedula: { contains: t } }, { ruc: { contains: t } }, { telefono: { contains: t } }] }
+        : { OR: [{ nombre: { contains: t, mode: "insensitive" as const } }, { apellido: { contains: t, mode: "insensitive" as const } }] };
+    }),
+  };
 }
 
   const clientFilter = makeClientFilter(busqueda) ?? {};
@@ -376,14 +413,33 @@ export async function getClientesCursor({
   ]);
 
   const hasNext = nextRows.length > pageSize;
-  const items = hasNext ? nextRows.slice(0, pageSize) : nextRows;
+  let items = hasNext ? nextRows.slice(0, pageSize) : nextRows;
   const hasPrev = prevRows.length > pageSize;
   const prevItems = hasPrev ? prevRows.slice(0, pageSize).reverse() : prevRows.reverse();
 
+  // Ranking preciso sin perder cursor: dentro de la página (20 filas) ordenar por relevancia
+  const rawQ = busqueda?.trim().toLowerCase() ?? "";
+  if (rawQ.length >= 2) {
+    const terminos = rawQ.split(/\s+/).filter(Boolean);
+    const score = (c: { nombre: string; apellido: string }) => {
+      const full = `${c.nombre} ${c.apellido}`.toLowerCase();
+      if (full === rawQ) return 0;
+      if (full.startsWith(rawQ)) return 1;
+      if (terminos.every((t) => full.includes(t))) return 2;
+      return 3;
+    };
+    items = [...items].sort((a, b) => {
+      const sa = score(a as any);
+      const sb = score(b as any);
+      if (sa !== sb) return sa - sb;
+      return `${a.apellido} ${a.nombre}`.localeCompare(`${b.apellido} ${b.nombre}`);
+    });
+  }
+
   return {
     items: items.map(toCliente),
-    nextCursor: hasNext ? makeCursor(nextRows[pageSize - 1]) : null,
-    prevCursor: hasPrev ? makeCursor(prevItems[0]) : null,
+    nextCursor: hasNext ? makeCursor(items[items.length - 1] as any) : null,
+    prevCursor: hasPrev ? makeCursor(prevItems[0] as any) : null,
   };
 }
 
