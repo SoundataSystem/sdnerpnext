@@ -5,7 +5,7 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAction } from "next-safe-action/hooks";
 import { toast } from "sonner";
-import { Users, Search, Plus, Pencil, ChevronLeft, ChevronRight } from "lucide-react";
+import { Users, Search, Plus, Pencil, ChevronLeft, ChevronRight, FileDown } from "lucide-react";
 import {
   crearClienteAction,
   actualizarClienteAction,
@@ -140,12 +140,50 @@ export function ClientesClient({
             </p>
           </div>
         </div>
-        <button
-          onClick={abrirCrear}
-          className="inline-flex items-center gap-1.5 rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-zinc-700 dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-zinc-200"
-        >
-          <Plus className="h-4 w-4" /> Nuevo Cliente
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={async () => {
+              const q = busquedaInicial ? `?busqueda=${encodeURIComponent(busquedaInicial)}` : "";
+              const res = await fetch(`/api/ventas/clientes/export${q}`);
+              if (!res.ok) { toast.error("Error al exportar"); return; }
+              const { items } = (await res.json()) as { items: Record<string, unknown>[] };
+              if (!items.length) { toast.warning("Sin datos para exportar"); return; }
+              const XLSX = await import("xlsx");
+              const cols = [
+                { key: "nombre", header: "Nombre" },
+                { key: "apellido", header: "Apellido" },
+                { key: "tipo_documento", header: "Tipo Doc." },
+                { key: "cedula", header: "Cédula/RUC" },
+                { key: "ruc", header: "RUC" },
+                { key: "telefono", header: "Teléfono" },
+                { key: "email", header: "Email" },
+                { key: "direccion", header: "Dirección" },
+                { key: "ciudad", header: "Ciudad" },
+                { key: "pais", header: "País" },
+              ];
+              const rows = items.map((r) => {
+                const o: Record<string, string> = {};
+                cols.forEach((c) => { o[c.header] = String((r[c.key] as string) ?? ""); });
+                return o;
+              });
+              const ws = XLSX.utils.json_to_sheet(rows);
+              cols.forEach((_, i) => { const col = ws[XLSX.utils.encode_col(i)]; if (col) ws["!cols"] = ws["!cols"] || []; });
+              const wb = XLSX.utils.book_new();
+              XLSX.utils.book_append_sheet(wb, ws, "Clientes");
+              XLSX.writeFile(wb, `clientes${busquedaInicial ? `-${busquedaInicial}` : ""}.xlsx`);
+              toast.success(`${items.length} clientes exportados`);
+            }}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-300"
+          >
+            <FileDown className="h-4 w-4" /> Excel
+          </button>
+          <button
+            onClick={abrirCrear}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-zinc-700 dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-zinc-200"
+          >
+            <Plus className="h-4 w-4" /> Nuevo Cliente
+          </button>
+        </div>
       </div>
 
       <div className="rounded-2xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-950">
