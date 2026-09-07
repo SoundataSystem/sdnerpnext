@@ -98,7 +98,7 @@ export function OrdenFormClient({ clientes, productos, vendedores, metodosPago, 
     return productos.filter(p=> (p.codigo && String(p.codigo).toLowerCase().includes(q)) || p.nombre.toLowerCase().includes(q) || (p.barcode && p.barcode.toLowerCase().includes(q)) ).slice(0,20);
   },[busqueda,productos]);
 
-  useEffect(()=>{ if(!clienteId){ setClienteData(null); return; } const c=clientes.find(x=>x.id===clienteId); if(c) setClienteData(c); else fetch(`/api/ventas/clientes/search?busqueda=${encodeURIComponent(clienteId)}`).then(r=>r.json()).then(()=>{}).catch(()=>{}); },[clienteId, clientes]);
+   useEffect(()=>{ if(!clienteId){ setClienteData(null); return; } const c=clientes.find(x=>x.id===clienteId); if(c) setClienteData(c); else fetch(`/api/ventas/clientes/search?q=${encodeURIComponent(clienteId)}`).then(r=>r.json()).then(()=>{}).catch(()=>{}); },[clienteId, clientes]);
 
   const agregarProducto = (p?: ProductoVentaDTO, precioForzado?: number)=>{
     const prod = p || (resultados.length>0? resultados[selectedIdx]: null);
