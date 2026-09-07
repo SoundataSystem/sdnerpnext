@@ -331,55 +331,53 @@ export async function getClientesCursor({
   nextCursor: ClienteCursor | null;
   prevCursor: ClienteCursor | null;
 }> {
-  function makeClientFilter(busqueda?: string): Prisma.ClienteWhereInput | undefined {
-  const terminos = busqueda?.trim().split(/\s+/).filter(Boolean) ?? [];
-  return terminos.length
-    ? {
-        AND: terminos.map((t) => ({
-          OR: [
-            { nombre: { contains: t, mode: "insensitive" as const } },
-            { apellido: { contains: t, mode: "insensitive" as const } },
-            { cedula: { contains: t } },
-            { ruc: { contains: t } },
-          ],
-        })),
-      }
-    : undefined;
-}
-
-  const clientFilter = makeClientFilter(busqueda) ?? {};
-  const whereNext: Prisma.ClienteWhereInput = cursor
-    ? { AND: [clientFilter, cursorToWhere(cursor)].filter(Boolean) as Prisma.ClienteWhereInput[] }
-    : clientFilter;
-  const wherePrev: Prisma.ClienteWhereInput = cursor
-    ? { AND: [clientFilter, cursorToWherePrev(cursor)].filter(Boolean) as Prisma.ClienteWhereInput[] }
-    : clientFilter;
-
-  // Traer 1 extra para saber si hay next/prev
+  // Filtro preciso: cada término ILIKE OR (nombre/apellido/cedula/ruc/telefono) con AND, como getClientesPage
+  const rawQ = busqueda?.trim() ?? "";
+  const terminos = rawQ.split(/\s+/).filter(Boolean);
+  const esc = (s: string) => s.replace(/'/g, "''");
+  const qLower = rawQ.toLowerCase();
+  const qEsc = esc(qLower);
+  const whereParts = terminos.map((t) => {
+    const tEsc = esc(t);
+    const isNum = /^\d+$/.test(t);
+    return isNum
+      ? `(cedula ILIKE '%${tEsc}%' OR ruc ILIKE '%${tEsc}%' OR telefono ILIKE '%${tEsc}%')`
+      : `(nombre ILIKE '%${tEsc}%' OR apellido ILIKE '%${tEsc}%')`;
+  });
+  const whereSql = terminos.length ? whereParts.join(" AND ") : "true";
+  const orderSql = terminos.length ? `CASE WHEN lower(nombre || ' ' || apellido) = '${qEsc}' THEN 0 WHEN lower(nombre || ' ' || apellido) LIKE '${qEsc}%' THEN 1 WHEN lower(nombre || ' ' || apellido) LIKE '%${qEsc}%' THEN 2 ELSE 3 END, nombre ASC` : "nombre ASC";
+  // Cursor keyset con relevancia: primero filtra por búsqueda, luego aplica cursor
+  const cursorWhere = cursor ? ` AND (${cursorToWhereSql(cursor)}) ` : "";
+  function cursorToWhereSql(c: typeof cursor) {
+    if (!c) return "true";
+    const aEsc = esc(c.apellido);
+    const nEsc = esc(c.nombre);
+    const idEsc = esc(c.id);
+    return `(apellido > '${aEsc}' OR (apellido = '${aEsc}' AND nombre > '${nEsc}') OR (apellido = '${aEsc}' AND nombre = '${nEsc}' AND id > '${idEsc}'))`;
+  }
+  function cursorToWherePrevSql(c: typeof cursor) {
+    if (!c) return "true";
+    const aEsc = esc(c.apellido);
+    const nEsc = esc(c.nombre);
+    const idEsc = esc(c.id);
+    return `(apellido < '${aEsc}' OR (apellido = '${aEsc}' AND nombre < '${nEsc}') OR (apellido = '${aEsc}' AND nombre = '${nEsc}' AND id < '${idEsc}'))`;
+  }
+  const whereNextSql = terminos.length ? `(${whereSql}) ${cursor ? `AND (${cursorToWhereSql(cursor)})` : ""}` : cursor ? cursorToWhereSql(cursor) : "true";
+  const wherePrevSql = terminos.length ? `(${whereSql}) ${cursor ? `AND (${cursorToWherePrevSql(cursor)})` : ""}` : cursor ? cursorToWherePrevSql(cursor) : "true";
+  const nextSql = `SELECT * FROM clientes WHERE ${whereNextSql} ORDER BY ${orderSql} LIMIT ${pageSize + 1}`;
+  const prevSql = cursor ? `SELECT * FROM clientes WHERE ${wherePrevSql} ORDER BY nombre DESC, apellido DESC, id DESC LIMIT ${pageSize + 1}` : null;
   const [nextRows, prevRows] = await Promise.all([
-    prisma.cliente.findMany({
-      where: whereNext,
-      orderBy: [{ apellido: "asc" }, { nombre: "asc" }, { id: "asc" }],
-      take: pageSize + 1,
-    }),
-    cursor
-      ? prisma.cliente.findMany({
-          where: wherePrev,
-          orderBy: [{ apellido: "desc" }, { nombre: "desc" }, { id: "desc" }],
-          take: pageSize + 1,
-        })
-      : Promise.resolve([] as Prisma.ClienteGetPayload<Record<string, unknown>>[]),
+    prisma.$queryRawUnsafe<Cliente[]>(nextSql),
+    prevSql ? prisma.$queryRawUnsafe<Cliente[]>(prevSql) : Promise.resolve([] as Cliente[]),
   ]);
-
   const hasNext = nextRows.length > pageSize;
   const items = hasNext ? nextRows.slice(0, pageSize) : nextRows;
-  const hasPrev = prevRows.length > pageSize;
-  const prevItems = hasPrev ? prevRows.slice(0, pageSize).reverse() : prevRows.reverse();
-
+  const hasPrev = (prevRows as Cliente[]).length > pageSize;
+  const prevItems = hasPrev ? (prevRows as Cliente[]).slice(0, pageSize).reverse() : (prevRows as Cliente[]).reverse();
   return {
     items: items.map(toCliente),
-    nextCursor: hasNext ? makeCursor(nextRows[pageSize - 1]) : null,
-    prevCursor: hasPrev ? makeCursor(prevItems[0]) : null,
+    nextCursor: hasNext ? makeCursor(items[items.length - 1] as any) : null,
+    prevCursor: hasPrev ? makeCursor(prevItems[0] as any) : null,
   };
 }
 
