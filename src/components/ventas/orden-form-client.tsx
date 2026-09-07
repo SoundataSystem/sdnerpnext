@@ -155,7 +155,7 @@ export function OrdenFormClient({ clientes, productos, vendedores, metodosPago, 
     if(!termino.trim()){ setClienteResults([]); return; }
     setSearchingCliente(true); setShowClientes(true);
     try{
-      const res = await fetch(`/api/ventas/clientes/search?busqueda=${encodeURIComponent(termino.trim())}&pageSize=20`);
+      const res = await fetch(`/api/ventas/clientes/search?q=${encodeURIComponent(termino.trim())}&pageSize=50`);
       const data = await res.json();
       // API returns {items} or array
       const list = Array.isArray(data)? data: data.items ?? data.clientes ?? [];
@@ -164,6 +164,15 @@ export function OrdenFormClient({ clientes, productos, vendedores, metodosPago, 
     }catch{}
     setSearchingCliente(false);
   };
+
+  // Auto-search con debounce
+  useEffect(()=>{
+    const t = setTimeout(()=>{
+      if(clienteBusqueda.trim().length >= 2) buscarCliente(clienteBusqueda.trim());
+      else setClienteResults([]);
+    }, 300);
+    return ()=> clearTimeout(t);
+  }, [clienteBusqueda]);
 
   useEffect(()=>{
     const h=(e:MouseEvent)=>{
