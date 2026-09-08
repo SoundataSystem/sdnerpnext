@@ -56,19 +56,23 @@ describe("CICLO E2E: OC → aprobar → enviar → recepción → ingreso stock 
     // 3. Pendiente ↠ aprobación: primero pasa la máquina de estados?
     // Esto es lo que ve el usuario en la UI — "aprobar" desde estado "pendiente_aprobacion"
 
-    // 3. PENDIENTE enviársela a aprobar: transición válida es "pendiente_aprobacion" → "aprobar"? Verifico máquina
-    //    Si el entorno está en "borrador", el usuario ve "pendiente de aprobar" pero NO puede aprobar.
-    //    El flujo real debía ser: crear → pendiente_aprobacion → (aprobar) → aprobada.
-    //    NOTA: La máquina está bloqueada, así que voy a actualizar el estado manualmente
-    //          para poder probar la APROBACIÓN (que es lo que realmente falla en producción).
+    // 3. PENDIENTE de aprobar: la máquina de estados no pasa por este estado al
+    //    crear (quedó en "borrador"); lo fijamos manualmente para probar la
+    //    APROBACIÓN por la API real (pendiente_aprobacion → aprobada).
     await prisma.ordenesCompra.update({
       where: { id: ocId },
       data: { estado: "pendiente_aprobacion" },
     });
 
-    // 3b. Intentar aprobar — aquí originalmente el usuario ve "error interno del servidor"
+    // 3b. Aprobar: transición válida desde pendiente_aprobacion
+    await transicionEstadoOc(ocId, "aprobar", {
+      id: admin.id,
+      nombre: admin.nombre,
+      apellido: "",
+      rol: "admin",
+    });
 
-    // 5. Enviar a proveedor
+    // 5. Enviar a proveedor (aprobada → enviada)
     await expect(
       transicionEstadoOc(ocId, "enviar", { id: admin.id, nombre: admin.nombre, apellido: "", rol: "admin" })
     ).resolves.not.toThrow();
