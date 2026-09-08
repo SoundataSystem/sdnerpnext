@@ -24,7 +24,6 @@ import {
 } from "@/lib/ventas/schema";
 import {
   calcularVenta,
-  conDeliveryEnObservaciones,
   parseDeliveryDeObservaciones,
 } from "@/lib/ventas/calculos";
 import {
@@ -658,11 +657,8 @@ export async function crearOrden(
         estado_caja: "pendiente_envio",
         pay_status: "pendiente",
         vendedor_codigo: vendedor.vendedor_codigo,
-        vendedor_nombre: `${vendedor.nombre} ${vendedor.apellido}`.trim(),
-        observaciones: conDeliveryEnObservaciones(
-          parsed.observaciones,
-          calc.costo_delivery,
-        ) || null,
+	        vendedor_nombre: `${vendedor.nombre} ${vendedor.apellido}`.trim(),
+	        observaciones: parsed.observaciones || null,
         is_tax_included: parsed.tipo_venta === "iva_incluido",
         sucursal: parsed.sucursal || null,
         moneda: parsed.moneda ?? "GS",
@@ -1005,17 +1001,14 @@ export async function actualizarOrden(
       data: {
         vendedor_id: vendedor.id,
         vendedor_codigo: vendedor.vendedor_codigo,
-        vendedor_nombre: `${vendedor.nombre} ${vendedor.apellido}`.trim(),
-        cliente_id: parsed.cliente_id,
-        subtotal: calc.subtotal,
-        costo_operativo: calc.costo_operativo,
-        comision_vendedor: calc.comision_vendedor,
-        total: calc.total,
-        shipping_fee: calc.costo_delivery || null,
-        observaciones: conDeliveryEnObservaciones(
-          parsed.observaciones,
-          calc.costo_delivery,
-        ) || null,
+vendedor_nombre: `${vendedor.nombre} ${vendedor.apellido}`.trim(),
+	        cliente_id: parsed.cliente_id,
+	        subtotal: calc.subtotal,
+	        costo_operativo: calc.costo_operativo,
+	        comision_vendedor: calc.comision_vendedor,
+	        total: calc.total,
+	        shipping_fee: calc.costo_delivery || null,
+	        observaciones: parsed.observaciones || null,
         is_tax_included: parsed.tipo_venta === "iva_incluido",
         sucursal: parsed.sucursal || null,
         moneda: parsed.moneda ?? "GS",
