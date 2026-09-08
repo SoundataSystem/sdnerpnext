@@ -22,3 +22,13 @@ BEGIN
         END;
     END LOOP;
 END $$;
+
+-- Column-level security: oculta columnas sensibles (tax_id/imei) para anon/authenticated
+REVOKE SELECT ON public.clientes FROM anon, authenticated;
+GRANT SELECT (id, nombre, apellido, cedula, telefono, email, direccion, ciudad, erp_original_id, created_at, updated_at, codigo_pegasus, condicion_venta_pegasus, codigo_vendedor, pais, ruc, code, client_type, discount, sales_condition, salesperson_code, price_type, zone, amount, tipo_documento) ON public.clientes TO anon, authenticated;
+
+REVOKE SELECT ON public.orden_productos FROM anon, authenticated;
+GRANT SELECT (id, orden_id, producto_id, cantidad, precio_unitario, subtotal, serial_producto, erp_original_id, warehouse, return_id, status, serial, created_at) ON public.orden_productos TO anon, authenticated;
+
+REVOKE SELECT ON public.ordenes_compra_items FROM anon, authenticated;
+GRANT SELECT (item_id, po_id, warehouse, product_barcode, quantity, unit_price, currency, serial, status, return_id, erp_original_id, producto_id, cantidad_recibida) ON public.ordenes_compra_items TO anon, authenticated;

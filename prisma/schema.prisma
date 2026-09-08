@@ -347,7 +347,6 @@ model ConfiguracionSistema {
   @@map("configuracion_sistema")
 }
 
-// supabase-disable-column-security
 model Cliente {
   id                      String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   nombre                  String
@@ -516,7 +515,6 @@ model Orden {
   @@map("ordenes")
 }
 
-// supabase-disable-column-security
 model OrdenProducto {
   id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   orden_id        String   @db.Uuid
@@ -775,7 +773,6 @@ model OrdenesCompra {
   @@map("ordenes_compra")
 }
 
-// supabase-disable-column-security
 model OrdenesCompraItem {
   item_id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   po_id             String?  @db.Uuid
